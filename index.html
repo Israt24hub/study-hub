@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Israt's Study Hub</title>
+    <meta name="description" content="Course notes, summaries and reports from CSE courses at North South University, free to read and download.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,600&family=JetBrains+Mono:wght@500&display=swap">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="masthead">
+    <div class="wrap">
+        <p class="eyebrow">Study Hub</p>
+        <h1>Course notes &amp; reports</h1>
+        <p class="lede">Notes, summaries and reports from my CSE courses at North South University. Free to read and download.</p>
+        <p class="stats" id="stats">Loading…</p>
+    </div>
+</header>
+
+<main class="wrap">
+    <div class="controls" role="search">
+        <label class="search">
+            <span class="visually-hidden">Search documents</span>
+            <input id="q" type="search" placeholder="Search by title, course, topic…" autocomplete="off">
+        </label>
+        <select id="course" aria-label="Course"><option value="">All courses</option></select>
+        <select id="sort" aria-label="Sort">
+            <option value="course">Group by course</option>
+            <option value="new">Newest first</option>
+            <option value="az">A to Z</option>
+        </select>
+    </div>
+    <div class="types" id="types" role="group" aria-label="Document type"></div>
+
+    <section id="recent" class="recent" hidden>
+        <h2>Recently added</h2>
+        <ol id="recent-list" class="recent-list"></ol>
+    </section>
+
+    <section id="list" aria-live="polite"></section>
+
+    <section class="also">
+        <h2>Projects</h2>
+        <ul>
+            <li><a href="https://github.com/Israt24hub/bank-marketing-leakage">Bank Marketing: one column that fakes the results</a> · CSE445 study of data leakage</li>
+            <li><a href="https://israt24hub.github.io/data-leakage-explained/">The Column That Fooled Every Model</a> · interactive explainer</li>
+            <li><a href="https://github.com/Israt24hub/leakguard">LeakGuard</a> · Python library that finds data leakage</li>
+            <li><a href="https://github.com/Israt24hub/bangla-digit-recognizer">Bangla Digit Recognizer</a> · CNN in the browser</li>
+            <li><a href="https://github.com/Israt24hub/bangla-sentiment">Bangla Sentiment Analysis</a> · BanglaBERT on SentNoB</li>
+        </ul>
+    </section>
+</main>
+
+<footer class="wrap foot">
+    <p>By <a href="https://github.com/Israt24hub">Israt Zaman Srity</a>. My own notes and reports are shared under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>: reuse them freely with credit. Course materials by others appear only with permission.</p>
+    <p>Found a mistake? <a href="https://github.com/Israt24hub/study-hub/issues">Let me know</a>.</p>
+</footer>
+
+<template id="row-tpl">
+    <li class="doc">
+        <span class="ext"></span>
+        <div class="doc-main">
+            <p class="doc-title"></p>
+            <p class="doc-desc"></p>
+            <p class="doc-meta"></p>
+        </div>
+        <div class="doc-actions">
+            <a class="view" target="_blank" rel="noopener">View</a>
+            <a class="download" download>Download</a>
+        </div>
+    </li>
+</template>
+<script src="js/app.js"></script>
+</body>
+</html>
