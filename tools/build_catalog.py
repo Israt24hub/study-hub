@@ -114,9 +114,8 @@ def main() -> None:
     # make browsers fetch the new style sheet and script after every update instead of an old cached copy
     version = (os.environ.get("GITHUB_SHA") or catalog["generated"])[:12]
     page = OUT / "index.html"
-    page.write_text(page.read_text(encoding="utf-8")
-                    .replace('href="css/style.css"', f'href="css/style.css?v={version}"')
-                    .replace('src="js/app.js"', f'src="js/app.js?v={version}"'), encoding="utf-8")
+    page.write_text(re.sub(r'(href|src)="((?:css|js)/[^"?]+)"', lambda m: f'{m.group(1)}="{m.group(2)}?v={version}"',
+                           page.read_text(encoding="utf-8")), encoding="utf-8")
     if (SLIDES / "key.json").exists() and (SLIDES / "index.enc").exists():
         (OUT / "slides").mkdir()
         for name in ("key.json", "index.enc"):

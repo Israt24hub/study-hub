@@ -49,6 +49,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20" stroke-linecap="round"/></g></svg>
             </button>
         </div>
+        <span class="admin-badge admin-only">Admin <button type="button" id="admin-signout">Sign out</button></span>
         <button type="button" id="unlock" class="unlock" hidden>🔒 Unlock slides</button>
     </div>
 </header>
@@ -71,6 +72,7 @@
 
         <div class="dash-head">
             <h2>Courses</h2>
+            <button type="button" class="btn primary admin-only add-docs" data-add-course="">＋ Add documents</button>
             <div class="seg" role="group" aria-label="Arrange courses">
                 <button type="button" data-sort="term" aria-pressed="true">By semester</button>
                 <button type="button" data-sort="code" aria-pressed="false">By course code</button>
@@ -105,6 +107,7 @@
             </div>
             <h1 id="course-title"></h1>
             <p class="course-desc" id="course-desc"></p>
+            <button type="button" class="btn primary admin-only add-docs" id="course-add">＋ Add documents</button>
         </header>
         <div class="tabs" id="tabs" role="group" aria-label="Document type"></div>
         <div id="course-body" aria-live="polite"></div>
@@ -120,8 +123,80 @@
 
 <footer class="wrap foot">
     <p>By <a href="https://israt24hub.github.io/">Israt Zaman Srity</a>. My own notes and reports are shared under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>: reuse them freely with credit. Teachers' slides are locked and shared only with people I've given the password.</p>
-    <p>Found a mistake? <a href="https://github.com/Israt24hub/study-hub/issues">Let me know</a>.</p>
+    <p>Found a mistake? <a href="https://github.com/Israt24hub/study-hub/issues">Let me know</a>. <button type="button" class="linklike admin-link" id="admin-link">Admin</button></p>
 </footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- admin sign-in: a GitHub access key that can change this repository -->
+<dialog id="admin-dlg" class="dlg" aria-labelledby="admin-title">
+    <form id="admin-form">
+        <h2 id="admin-title">Admin sign-in</h2>
+        <p>Only the site owner can add or delete documents. Sign in with your GitHub access key for this repository.</p>
+        <label for="admin-token">GitHub access key</label>
+        <input id="admin-token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…" required>
+        <label class="check"><input type="checkbox" id="admin-remember"> Remember on this device</label>
+        <p class="dlg-error" id="admin-err" role="alert" hidden></p>
+        <details class="howto">
+            <summary>How do I get a key?</summary>
+            <ol>
+                <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → New fine-grained token</a>.</li>
+                <li>Name it <i>Study Hub admin</i> and pick an expiry (90 days is sensible).</li>
+                <li>Repository access: <b>Only select repositories</b> → <b>study-hub</b>.</li>
+                <li>Permissions → Repository permissions → <b>Contents: Read and write</b>.</li>
+                <li>Generate it, copy it, and paste it here. Keep it secret, like a password.</li>
+            </ol>
+        </details>
+        <div class="dlg-actions">
+            <button type="button" id="admin-cancel">Cancel</button>
+            <button type="submit" id="admin-go" class="primary">Sign in</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- admin: add documents -->
+<dialog id="add-dlg" class="dlg dlg-wide" aria-labelledby="add-title">
+    <form id="add-form">
+        <h2 id="add-title">Add documents</h2>
+        <label for="add-course">Course</label>
+        <select id="add-course" required></select>
+        <div id="new-course" class="new-course" hidden>
+            <div class="field-row">
+                <div><label for="nc-code">Course code</label><input id="nc-code" type="text" placeholder="CSE332" autocomplete="off"></div>
+                <div><label for="nc-name">Course name</label><input id="nc-name" type="text" placeholder="Computer Organization" autocomplete="off"></div>
+            </div>
+            <div class="field-row">
+                <div><label for="nc-term">Semester</label>
+                    <select id="nc-term"><option value="">Not set</option><option>Spring</option><option>Summer</option><option>Fall</option></select></div>
+                <div><label for="nc-year">Year</label><input id="nc-year" type="number" min="2015" max="2100"></div>
+            </div>
+            <label for="nc-desc">Course description <span class="optional">(optional)</span></label>
+            <input id="nc-desc" type="text" autocomplete="off">
+        </div>
+        <label for="add-type">Type</label>
+        <select id="add-type" required></select>
+        <input id="add-type-new" type="text" placeholder="For example: Lab Reports" hidden>
+        <label for="add-files">Files</label>
+        <label class="drop" id="drop">
+            <input id="add-files" type="file" multiple required>
+            <span id="drop-text">Choose files, or drop them here</span>
+        </label>
+        <ul class="picked" id="picked"></ul>
+        <div id="single-title" hidden>
+            <label for="add-title-text">Title on the site <span class="optional">(optional, otherwise the file name)</span></label>
+            <input id="add-title-text" type="text" autocomplete="off">
+        </div>
+        <label for="add-desc">Description <span class="optional">(optional)</span></label>
+        <input id="add-desc" type="text" autocomplete="off">
+        <p class="dlg-note">Only your own work goes here. Teachers' slides must stay locked: add them with the lock script instead.</p>
+        <p class="dlg-error" id="add-err" role="alert" hidden></p>
+        <p class="dlg-progress" id="add-progress" hidden></p>
+        <div class="dlg-actions">
+            <button type="button" id="add-cancel">Cancel</button>
+            <button type="submit" id="add-go" class="primary">Upload</button>
+        </div>
+    </form>
+</dialog>
 
 <!-- password dialog for the locked slides -->
 <dialog id="unlock-dlg" class="dlg" aria-labelledby="unlock-title">
@@ -177,5 +252,6 @@
     </li>
 </template>
 <script src="js/app.js"></script>
+<script src="js/admin.js"></script>
 </body>
 </html>

@@ -39,6 +39,18 @@ CSE445 - Machine Learning,Machine Learning,Summer 2026,"Classical ML, evaluation
 
 Both files can be edited on GitHub (pencil icon) or in Excel (save as CSV).
 
+## Admin: add and delete documents from the site
+
+Scroll to the bottom of the site and click **Admin**. Sign in with a GitHub access key (instructions are in the sign-in box, under *How do I get a key?*): a **fine-grained token** with access to **only the study-hub repository** and **Contents: Read and write**. Once you're signed in:
+
+- **＋ Add documents** (on the dashboard and on every course page): pick the course (or create a new one), the type, and one or more files. You can also give a title and a description. They show as *publishing…* straight away, and the site updates in about 2 minutes.
+- **Delete** on every document removes it from the site in about 2 minutes. It stays in the repository's history.
+- **Sign out** in the top bar forgets the key. *Remember on this device* keeps you signed in on that browser, so don't tick it on a shared computer.
+
+How it's safe: the site has no server. Adding or deleting makes a commit through the GitHub API, using your key, and GitHub refuses anyone without a key that can write to this repository. Visitors can see that an Admin button exists, but they can't do anything with it. If a key ever leaks, delete it at github.com/settings/personal-access-tokens; that makes it useless immediately.
+
+Teachers' slides can't be added here. They must stay locked, so use the lock script for them (below).
+
 ## What belongs here
 
 - **Yes:** my own notes, summaries, cheat sheets, and my reports once the course is over (group work only with teammates' agreement).

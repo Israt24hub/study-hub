@@ -117,11 +117,23 @@
             dl.addEventListener("click", function (e) { e.preventDefault(); openSlide(doc, false, dl) })
             return li
         }
+        if (doc.pending) {   // just uploaded by the admin: not on the site until it rebuilds
+            badge.textContent = doc.type + " · publishing…"
+            view.hidden = dl.hidden = true
+            return li
+        }
         var v = viewUrl(doc)
         if (v) view.href = v
         else view.hidden = true
         dl.href = fileUrl(doc.path)
         dl.setAttribute("download", doc.path.split("/").pop())
+        var del = el("button", "delete admin-only", "Delete")
+        del.type = "button"
+        del.setAttribute("aria-label", "Delete " + doc.title)
+        del.addEventListener("click", function () {
+            document.dispatchEvent(new CustomEvent("studyhub:delete", { detail: doc }))
+        })
+        li.querySelector(".doc-actions").appendChild(del)
         return li
     }
     function docList(docs, showCourse) {
@@ -436,6 +448,7 @@
        Every locked file is  "SHB1" | iv | AES-256-CBC(data) | HMAC-SHA256  (see tools/lock_slides.ps1). */
     var SESSION_KEY = "studyhub-slides"
     var slideKeys = null
+    var lastSlideIndex = null
     var MIME = { pdf: "application/pdf", ppt: "application/vnd.ms-powerpoint",
                  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }
     var COURSE_RE = /^([A-Za-z]{2,4}\s?\d{3}[A-Za-z]?)\s*[-–:]?\s*(.*)$/
@@ -488,6 +501,7 @@
     }
 
     function addSlides(index) {
+        lastSlideIndex = index
         var known = {}
         data.courses.forEach(function (c) { known[c.folder] = c })
         Object.keys(index.courses || {}).forEach(function (folder) {
@@ -633,6 +647,30 @@
     window.addEventListener("hashchange", function () { readHash(); $("q").value = state.q; render() })
     window.addEventListener("popstate", function () { readHash(); $("q").value = state.q; render() })
     setupRequest()
+
+    // used by js/admin.js (add and delete for the site owner)
+    function toast(text) {
+        var t = $("toast")
+        t.textContent = text
+        t.hidden = false
+        clearTimeout(toast.timer)
+        toast.timer = setTimeout(function () { t.hidden = true }, 6000)
+    }
+    function useCatalog(json) {
+        data = json
+        if (slideKeys && lastSlideIndex) addSlides(lastSlideIndex)   // also re-renders
+        else { showStats(); render() }
+    }
+    window.StudyHub = {
+        data: function () { return data },
+        state: state,
+        render: function () { showStats(); render() },
+        courseOf: courseOf,
+        courseLabel: courseLabel,
+        termKey: termKey,
+        toast: toast,
+        useCatalog: useCatalog,
+    }
 
     fetch("catalog.json", { cache: "no-cache" })
         .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
