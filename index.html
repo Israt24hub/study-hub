@@ -17,8 +17,23 @@
         <h1>Course notes &amp; reports</h1>
         <p class="lede">Notes, summaries and reports from my CSE courses at North South University. Free to read and download.</p>
         <p class="stats" id="stats">Loading…</p>
+        <button type="button" id="unlock" class="unlock" hidden>🔒 Unlock slides</button>
     </div>
 </header>
+
+<dialog id="unlock-dlg" class="dlg" aria-labelledby="unlock-title">
+    <form id="unlock-form">
+        <h2 id="unlock-title">Unlock slides</h2>
+        <p>Teachers' lecture slides are locked. Enter the password to see them on this site.</p>
+        <label for="unlock-pw">Password</label>
+        <input id="unlock-pw" type="password" autocomplete="current-password" required>
+        <p class="dlg-error" id="unlock-err" role="alert" hidden></p>
+        <div class="dlg-actions">
+            <button type="button" id="unlock-cancel">Cancel</button>
+            <button type="submit" id="unlock-go" class="primary">Unlock</button>
+        </div>
+    </form>
+</dialog>
 
 <main class="wrap">
     <div class="controls" role="search">
@@ -55,7 +70,7 @@
 </main>
 
 <footer class="wrap foot">
-    <p>By <a href="https://github.com/Israt24hub">Israt Zaman Srity</a>. My own notes and reports are shared under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>: reuse them freely with credit. Course materials by others appear only with permission.</p>
+    <p>By <a href="https://github.com/Israt24hub">Israt Zaman Srity</a>. My own notes and reports are shared under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>: reuse them freely with credit. Teachers' slides are locked and shown only to people I've given the password.</p>
     <p>Found a mistake? <a href="https://github.com/Israt24hub/study-hub/issues">Let me know</a>.</p>
 </footer>
 

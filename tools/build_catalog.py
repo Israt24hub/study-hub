@@ -4,6 +4,9 @@ Folder layout:   files/<Course>/<Type>/<document>      e.g. files/CSE445 - Machi
                  files/<Course>/<document>              (type shown as "Other")
 Optional extras: library.csv  path,title,description,semester,tags   (nicer titles and descriptions)
                  courses.csv  folder,name,semester,description        (course details)
+Locked slides:   slides/ holds encrypted slides made by tools/lock_slides.ps1. Only key.json and index.enc
+                 are published with the site; the website fetches the locked .bin files from the repo itself,
+                 so they don't count towards the Pages size limit.
 
 Run locally:  python tools/build_catalog.py   (then open _site/index.html through a local server)
 """
@@ -21,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FILES = ROOT / "files"
+SLIDES = ROOT / "slides"
 OUT = ROOT / "_site"
 SKIP = {"readme.md", ".gitkeep", "desktop.ini", "thumbs.db", ".ds_store"}
 COURSE_RE = re.compile(r"^([A-Za-z]{2,4}\s?\d{3}[A-Za-z]?)\s*[-–:]?\s*(.*)$")
@@ -107,6 +111,17 @@ def main() -> None:
             shutil.copytree(src, OUT / item)
         elif src.exists():
             shutil.copy2(src, OUT / item)
+    if (SLIDES / "key.json").exists() and (SLIDES / "index.enc").exists():
+        (OUT / "slides").mkdir()
+        for name in ("key.json", "index.enc"):
+            shutil.copy2(SLIDES / name, OUT / "slides" / name)
+        repo, sha = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_SHA")
+        if repo and sha:
+            catalog["slides"] = {"base": f"https://raw.githubusercontent.com/{repo}/{sha}/slides/"}
+        else:  # local preview: serve the locked files from _site itself
+            for p in SLIDES.glob("*.bin"):
+                shutil.copy2(p, OUT / "slides" / p.name)
+            catalog["slides"] = {"base": "slides/"}
     (OUT / "catalog.json").write_text(json.dumps(catalog, ensure_ascii=False, indent=1), encoding="utf-8")
     (OUT / ".nojekyll").touch()
     total = sum(d["size"] for d in catalog["documents"])

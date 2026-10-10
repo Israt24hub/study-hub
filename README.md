@@ -40,12 +40,26 @@ Both files can be edited on GitHub (pencil icon) or in Excel (save as CSV).
 ## What belongs here
 
 - **Yes:** my own notes, summaries, cheat sheets, and my reports once the course is over (group work only with teammates' agreement).
-- **Only with permission:** teachers' slides and handouts.
+- **Locked, password only:** teachers' slides. They live encrypted in [`slides/`](slides) and appear on the site only after the password is entered (see below). Never put them in `files/`, which is public.
 - **No:** textbooks, solution manuals and other copyrighted PDFs. Link to the official source instead. Keep private copies in cloud storage.
+
+## Locked slides
+
+Teachers' slides are encrypted (AES-256) before they're uploaded, so the public repo only holds unreadable `.bin` files plus an encrypted list of titles. On the site, **🔒 Unlock slides** asks for the password; after that every course shows a *Slides* filter, PDFs open in a new tab and PowerPoint files download. Nothing is unlocked on GitHub's side: the browser does it, and the password never leaves your computer. People you give the password to can open and save the slides, so share it only with people you trust.
+
+To add more slides later (Windows PowerShell, from the repo folder):
+
+```powershell
+.\tools\lock_slides.ps1 -Unlock                                      # asks for the current password
+.\tools\lock_slides.ps1 -Encrypt -Source "E:\nsu academic\study-hub-slides"   # locks only the new files
+.\tools\lock_slides.ps1 -SetPassword                                 # same or new password
+```
+
+Put new slides in `<CODE - Course name>\Slides\` inside the source folder first, then commit `slides/` and push. If you see "running scripts is disabled", start PowerShell with `powershell -ExecutionPolicy Bypass`.
 
 ## How it works
 
-`tools/build_catalog.py` scans `files/`, reads the optional CSVs, and writes `catalog.json` with each document's course, type, size and the date it was added (from git history). A GitHub Actions workflow (`.github/workflows/publish.yml`) runs it on every upload and publishes the site to GitHub Pages. The page (`index.html`, `js/app.js`) loads the catalogue and handles search, filters and links: PDFs open in the browser, Word and PowerPoint files open in Microsoft's online viewer, and notebooks open in nbviewer.
+`tools/build_catalog.py` scans `files/`, reads the optional CSVs, and writes `catalog.json` with each document's course, type, size and the date it was added (from git history). A GitHub Actions workflow (`.github/workflows/publish.yml`) runs it on every upload and publishes the site to GitHub Pages. The page (`index.html`, `js/app.js`) loads the catalogue and handles search, filters and links: PDFs open in the browser, Word and PowerPoint files open in Microsoft's online viewer, and notebooks open in nbviewer. Only the small `slides/key.json` and `slides/index.enc` are published with the site; the locked slide files are fetched straight from the repo, so they don't count towards the Pages size limit.
 
 ## License
 

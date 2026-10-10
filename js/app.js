@@ -72,13 +72,24 @@
         bits.push(fmtSize(doc.size))
         bits.push("added " + fmtDate(doc.added))
         meta.appendChild(document.createTextNode(bits.join(" · ")))
-        var v = viewUrl(doc), view = li.querySelector(".view"), dl = li.querySelector(".download")
+        var view = li.querySelector(".view"), dl = li.querySelector(".download")
+        view.setAttribute("aria-label", "View " + doc.title)
+        dl.setAttribute("aria-label", "Download " + doc.title)
+        if (doc.locked) {
+            badge.textContent = "🔒 " + doc.type
+            view.href = dl.href = "#"
+            view.removeAttribute("target")
+            dl.removeAttribute("download")
+            view.hidden = doc.ext !== "pdf"   // browsers can show PDFs; PowerPoint files are downloaded
+            view.addEventListener("click", function (e) { e.preventDefault(); openSlide(doc, true, view) })
+            dl.addEventListener("click", function (e) { e.preventDefault(); openSlide(doc, false, dl) })
+            return li
+        }
+        var v = viewUrl(doc)
         if (v) view.href = v
         else view.hidden = true
         dl.href = fileUrl(doc.path)
         dl.setAttribute("download", doc.path.split("/").pop())
-        view.setAttribute("aria-label", "View " + doc.title)
-        dl.setAttribute("aria-label", "Download " + doc.title)
         return li
     }
 
@@ -113,7 +124,7 @@
         if (plain) {
             var rl = $("recent-list")
             rl.innerHTML = ""
-            data.documents.slice().sort(function (a, b) { return b.added.localeCompare(a.added) }).slice(0, 4).forEach(function (d) {
+            data.documents.filter(function (d) { return !d.locked }).sort(function (a, b) { return b.added.localeCompare(a.added) }).slice(0, 4).forEach(function (d) {
                 var li = document.createElement("li"), a = document.createElement("a")
                 a.href = viewUrl(d) || fileUrl(d.path)
                 a.target = "_blank"
@@ -184,6 +195,165 @@
         }
     }
 
+    function showStats() {
+        var total = data.documents.reduce(function (s, d) { return s + d.size }, 0)
+        $("stats").textContent = data.documents.length + " documents · " + data.courses.length + " courses · " + fmtSize(total) +
+            " · updated " + fmtDate(data.generated)
+    }
+    function fillCourses() {
+        var sel = $("course")
+        while (sel.options.length > 1) sel.remove(1)
+        data.courses.forEach(function (c) {
+            var o = document.createElement("option")
+            o.value = c.folder
+            o.textContent = courseLabel(c)
+            sel.appendChild(o)
+        })
+        sel.value = state.course
+    }
+
+    /* ---------------- locked slides ----------------
+       slides/key.json holds the master key, wrapped with a key derived from the password (PBKDF2-SHA256).
+       Every locked file is  "SHB1" | iv | AES-256-CBC(data) | HMAC-SHA256  (see tools/lock_slides.ps1). */
+    var SESSION_KEY = "studyhub-slides"
+    var slideKeys = null
+    var MIME = { pdf: "application/pdf", ppt: "application/vnd.ms-powerpoint",
+                 pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }
+    var COURSE_RE = /^([A-Za-z]{2,4}\s?\d{3}[A-Za-z]?)\s*[-–:]?\s*(.*)$/
+
+    function b64ToBytes(s) { var bin = atob(s), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out }
+    function bytesToB64(b) { var s = ""; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s) }
+    function okResponse(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r }
+
+    function importKeys(raw) {
+        return Promise.all([
+            crypto.subtle.importKey("raw", raw.slice(0, 32), "AES-CBC", false, ["decrypt"]),
+            crypto.subtle.importKey("raw", raw.slice(32, 64), { name: "HMAC", hash: "SHA-256" }, false, ["verify"])
+        ]).then(function (k) { return { aes: k[0], mac: k[1] } })
+    }
+    function openLocked(keys, buffer) {
+        var b = new Uint8Array(buffer)
+        if (b.length < 68 || b[0] !== 0x53 || b[1] !== 0x48 || b[2] !== 0x42 || b[3] !== 0x31) return Promise.reject(new Error("not a locked file"))
+        var end = b.length - 32
+        return crypto.subtle.verify("HMAC", keys.mac, b.slice(end), b.subarray(0, end)).then(function (good) {
+            if (!good) throw new Error("wrong password")
+            return crypto.subtle.decrypt({ name: "AES-CBC", iv: b.slice(4, 20) }, keys.aes, b.subarray(20, end))
+        })
+    }
+
+    function unlockWithPassword(password) {
+        return fetch("slides/key.json", { cache: "no-cache" }).then(okResponse).then(function (r) { return r.json() }).then(function (k) {
+            return crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"])
+                .then(function (base) {
+                    return crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: b64ToBytes(k.salt), iterations: k.iterations }, base, 512)
+                })
+                .then(function (bits) { return importKeys(new Uint8Array(bits)) })
+                .then(function (kek) { return openLocked(kek, b64ToBytes(k.wrapped).buffer) })
+        }).then(function (master) {
+            master = new Uint8Array(master)
+            try { sessionStorage.setItem(SESSION_KEY, bytesToB64(master)) } catch (e) { /* private mode: unlock again next time */ }
+            return loadSlides(master)
+        })
+    }
+
+    function loadSlides(master) {
+        return importKeys(master).then(function (keys) {
+            return fetch("slides/index.enc", { cache: "no-cache" }).then(okResponse)
+                .then(function (r) { return r.arrayBuffer() })
+                .then(function (buf) { return openLocked(keys, buf) })
+                .then(function (plain) {
+                    slideKeys = keys
+                    addSlides(JSON.parse(new TextDecoder().decode(plain)))
+                })
+        })
+    }
+
+    function addSlides(index) {
+        var known = {}
+        data.courses.forEach(function (c) { known[c.folder] = c })
+        Object.keys(index.courses || {}).forEach(function (folder) {
+            if (known[folder]) return
+            var m = COURSE_RE.exec(folder)
+            known[folder] = { folder: folder, code: m ? m[1].toUpperCase().replace(" ", "") : "", name: m ? m[2] : folder,
+                              semester: index.courses[folder].semester || "", description: "" }
+            data.courses.push(known[folder])
+        })
+        data.courses.sort(function (a, b) { return (a.code || "~").localeCompare(b.code || "~") || a.name.localeCompare(b.name) })
+        ;(index.slides || []).forEach(function (s) {
+            data.documents.push({ path: "", id: s.id, name: s.name, course: s.course, type: "Slides", title: s.title,
+                                  description: "", semester: "", tags: [], ext: s.ext, size: s.size,
+                                  added: s.added, updated: s.added, locked: true })
+        })
+        fillCourses()
+        showStats()
+        $("unlock").textContent = "🔓 Slides unlocked · Lock again"
+        render()
+    }
+
+    function openSlide(doc, inBrowser, button) {
+        var win = null
+        if (inBrowser) {   // open the tab now, while the click still counts, then fill it once the file is unlocked
+            win = window.open("", "_blank")
+            if (win) { win.document.title = "Opening…"; win.document.body.textContent = "Unlocking " + doc.title + "…" }
+        }
+        var label = button.textContent
+        button.textContent = "Unlocking…"
+        fetch(data.slides.base + doc.id + ".bin").then(okResponse)
+            .then(function (r) { return r.arrayBuffer() })
+            .then(function (buf) { return openLocked(slideKeys, buf) })
+            .then(function (plain) {
+                var url = URL.createObjectURL(new Blob([plain], { type: MIME[doc.ext] || "application/octet-stream" }))
+                if (win) { win.location.href = url; return }
+                if (inBrowser) { location.href = url; return }   // new tabs blocked: show it here (Back returns, still unlocked)
+                var a = document.createElement("a")
+                a.href = url
+                a.download = doc.name
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+            })
+            .catch(function () {
+                if (win) win.close()
+                alert("Couldn't open " + doc.title + ". Check your connection and try again.")
+            })
+            .then(function () { button.textContent = label })
+    }
+
+    function setupUnlock() {
+        var btn = $("unlock"), dlg = $("unlock-dlg"), form = $("unlock-form"), pw = $("unlock-pw"), err = $("unlock-err"), go = $("unlock-go")
+        if (!data.slides || !window.crypto || !crypto.subtle || typeof dlg.showModal !== "function") return
+        btn.hidden = false
+        btn.addEventListener("click", function () {
+            if (slideKeys) {   // already unlocked: lock again
+                try { sessionStorage.removeItem(SESSION_KEY) } catch (e) {}
+                location.reload()
+                return
+            }
+            err.hidden = true
+            pw.value = ""
+            dlg.showModal()
+        })
+        $("unlock-cancel").addEventListener("click", function () { dlg.close() })
+        form.addEventListener("submit", function (e) {
+            e.preventDefault()
+            go.disabled = true
+            go.textContent = "Unlocking…"
+            err.hidden = true
+            unlockWithPassword(pw.value)
+                .then(function () { dlg.close() })
+                .catch(function (ex) {
+                    err.textContent = /wrong password/.test(ex.message) ? "That password isn't right." : "Couldn't load the slides. Check your connection and try again."
+                    err.hidden = false
+                    pw.select()
+                })
+                .then(function () { go.disabled = false; go.textContent = "Unlock" })
+        })
+        var saved = null
+        try { saved = sessionStorage.getItem(SESSION_KEY) } catch (e) {}
+        if (saved) loadSlides(b64ToBytes(saved)).catch(function () { try { sessionStorage.removeItem(SESSION_KEY) } catch (e) {} })
+    }
+
     /* ---------------- start ---------------- */
     readHash()
     $("q").value = state.q
@@ -196,17 +366,10 @@
         .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
         .then(function (json) {
             data = json
-            var total = data.documents.reduce(function (s, d) { return s + d.size }, 0)
-            $("stats").textContent = data.documents.length + " documents · " + data.courses.length + " courses · " + fmtSize(total) +
-                " · updated " + fmtDate(data.generated)
-            data.courses.forEach(function (c) {
-                var o = document.createElement("option")
-                o.value = c.folder
-                o.textContent = courseLabel(c)
-                $("course").appendChild(o)
-            })
-            $("course").value = state.course
+            showStats()
+            fillCourses()
             render()
+            setupUnlock()
         })
         .catch(function () {
             $("stats").textContent = "The document list couldn't be loaded."
