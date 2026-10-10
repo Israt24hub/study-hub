@@ -1,8 +1,19 @@
+/*
+ * NSU Academic · Study Hub
+ * A dashboard of courses (grouped by semester), one page per course with its documents,
+ * search across everything, and locked lecture slides that need a password.
+ * Plain JavaScript, no libraries. The list of documents comes from catalog.json,
+ * which tools/build_catalog.py writes on every upload.
+ */
 ;(function () {
     "use strict"
-    var state = { q: "", type: "", course: "", sort: "course" }
+    var state = { q: "", type: "", course: "", sort: "term" }
     var data = { courses: [], documents: [] }
     var $ = function (id) { return document.getElementById(id) }
+    var homeScroll = 0
+    var lastView = ""
+    var requestEmail = (document.body.getAttribute("data-request-email") || "").trim()
+    var REPO = "https://github.com/Israt24hub/study-hub"
 
     function fmtSize(b) {
         if (b < 1e3) return b + " B"
@@ -25,9 +36,25 @@
     }
     function courseOf(folder) {
         for (var i = 0; i < data.courses.length; i++) if (data.courses[i].folder === folder) return data.courses[i]
-        return { folder: folder, code: "", name: folder }
+        return null
     }
     function courseLabel(c) { return c.code && c.name ? c.code + " · " + c.name : c.code || c.name }
+    function plural(n, one, many) { return n + " " + (n === 1 ? one : many) }
+    function el(tag, cls, text) {
+        var e = document.createElement(tag)
+        if (cls) e.className = cls
+        if (text != null) e.textContent = text
+        return e
+    }
+
+    // NSU has three semesters a year: Spring (Jan–Apr), Summer (May–Aug), Fall (Sep–Dec)
+    var TERM_ORDER = { spring: 1, summer: 2, fall: 3, autumn: 3 }
+    function termKey(semester) {
+        var m = /(spring|summer|fall|autumn)\s*(\d{4})/i.exec(semester || "")
+        return m ? Number(m[2]) * 10 + TERM_ORDER[m[1].toLowerCase()] : -1
+    }
+    function docsOf(folder) { return data.documents.filter(function (d) { return d.course === folder }) }
+    function slidesUnlocked() { return !!slideKeys }
 
     /* ---------------- state ↔ URL ---------------- */
     function readHash() {
@@ -35,25 +62,31 @@
         state.q = params.get("q") || ""
         state.type = params.get("type") || ""
         state.course = params.get("course") || ""
-        state.sort = params.get("sort") || "course"
+        state.sort = params.get("sort") === "code" ? "code" : "term"
+    }
+    function hashFor(s) {
+        var params = new URLSearchParams()
+        if (s.course) params.set("course", s.course)
+        if (s.type) params.set("type", s.type)
+        if (s.q) params.set("q", s.q)
+        if (s.sort === "code") params.set("sort", "code")
+        var h = params.toString()
+        return h ? "#" + h : ""
     }
     function writeHash() {
-        var params = new URLSearchParams()
-        Object.keys(state).forEach(function (k) { if (state[k] && !(k === "sort" && state[k] === "course")) params.set(k, state[k]) })
-        var h = params.toString()
-        history.replaceState(null, "", h ? "#" + h : location.pathname + location.search)
+        var h = hashFor(state)
+        history.replaceState(null, "", h || location.pathname + location.search)
+    }
+    function courseHref(folder) { return hashFor({ course: folder, sort: state.sort }) }
+
+    /* ---------------- ordering ---------------- */
+    function orderedCourses() {
+        var list = data.courses.slice()
+        if (state.sort === "code") return list.sort(function (a, b) { return (a.code || "~").localeCompare(b.code || "~") || a.name.localeCompare(b.name) })
+        return list.sort(function (a, b) { return termKey(b.semester) - termKey(a.semester) || (a.code || "~").localeCompare(b.code || "~") })
     }
 
-    /* ---------------- filtering ---------------- */
-    function matches(doc) {
-        if (state.type && doc.type !== state.type) return false
-        if (state.course && doc.course !== state.course) return false
-        if (!state.q) return true
-        var c = courseOf(doc.course)
-        var hay = [doc.title, doc.description, doc.type, doc.semester, c.code, c.name, doc.tags.join(" "), doc.path].join(" ").toLowerCase()
-        return state.q.toLowerCase().split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1 })
-    }
-
+    /* ---------------- document rows ---------------- */
     function row(doc, showCourse) {
         var li = $("row-tpl").content.firstElementChild.cloneNode(true)
         var ext = li.querySelector(".ext")
@@ -62,15 +95,14 @@
         li.querySelector(".doc-title").textContent = doc.title
         li.querySelector(".doc-desc").textContent = doc.description
         var meta = li.querySelector(".doc-meta")
-        var badge = document.createElement("span")
-        badge.className = "badge"
-        badge.textContent = doc.type
+        var badge = el("span", "badge", doc.type)
         meta.appendChild(badge)
         var bits = []
-        if (showCourse) bits.push(courseLabel(courseOf(doc.course)))
+        var c = courseOf(doc.course)
+        if (showCourse && c) bits.push(courseLabel(c))
         if (doc.semester) bits.push(doc.semester)
         bits.push(fmtSize(doc.size))
-        bits.push("added " + fmtDate(doc.added))
+        if (doc.added) bits.push("added " + fmtDate(doc.added))
         meta.appendChild(document.createTextNode(bits.join(" · ")))
         var view = li.querySelector(".view"), dl = li.querySelector(".download")
         view.setAttribute("aria-label", "View " + doc.title)
@@ -92,124 +124,311 @@
         dl.setAttribute("download", doc.path.split("/").pop())
         return li
     }
+    function docList(docs, showCourse) {
+        var ul = el("ul", "docs")
+        docs.forEach(function (d) { ul.appendChild(row(d, showCourse)) })
+        return ul
+    }
+    function empty(title, text) {
+        var box = el("div", "empty")
+        box.appendChild(el("h3", null, title))
+        if (text) box.appendChild(el("p", null, text))
+        return box
+    }
 
-    function render() {
-        writeHash()
-        var docs = data.documents.filter(matches)
-        var list = $("list")
-        list.innerHTML = ""
-
-        // type chips (counts follow the course + search filters)
+    /* ---------------- dashboard ---------------- */
+    var tileIndex = 0
+    function tile(c) {
+        var docs = docsOf(c.folder)
+        var a = el("a", "tile")
+        a.href = courseHref(c.folder)
+        a.style.setProperty("--i", tileIndex++)
+        var top = el("span", "tile-top")
+        if (c.code) top.appendChild(el("span", "code", c.code))
+        if (c.semester) top.appendChild(el("span", "term-tag", c.semester))
+        a.appendChild(top)
+        a.appendChild(el("h4", null, c.name || c.code))
+        if (c.description) a.appendChild(el("p", "tile-desc", c.description))
+        var foot = el("span", "tile-foot")
+        var count = el("span", "tile-count")
+        count.appendChild(el("b", null, String(docs.length)))
+        count.appendChild(document.createTextNode(docs.length === 1 ? "document" : "documents"))
+        foot.appendChild(count)
         var counts = {}
-        data.documents.forEach(function (d) {
-            var saved = state.type; state.type = ""
-            if (matches(d)) counts[d.type] = (counts[d.type] || 0) + 1
-            state.type = saved
+        docs.forEach(function (d) { if (!d.locked) counts[d.type] = (counts[d.type] || 0) + 1 })
+        Object.keys(counts).sort(function (x, y) { return counts[y] - counts[x] || x.localeCompare(y) }).forEach(function (t) {
+            foot.appendChild(el("span", "pill", t + " " + counts[t]))
         })
-        var types = $("types")
-        types.innerHTML = ""
-        ;[""].concat(Object.keys(counts).sort()).forEach(function (t) {
-            var b = document.createElement("button")
-            b.type = "button"
-            b.setAttribute("aria-pressed", state.type === t ? "true" : "false")
-            var n = t ? counts[t] : Object.keys(counts).reduce(function (s, k) { return s + counts[k] }, 0)
-            b.innerHTML = (t || "All") + "<span>" + n + "</span>"
-            b.addEventListener("click", function () { state.type = t; render() })
-            types.appendChild(b)
-        })
+        var slides = docs.filter(function (d) { return d.locked }).length
+        if (!slidesUnlocked()) foot.appendChild(el("span", "pill pill-lock", "🔒 Slides"))
+        else if (slides) foot.appendChild(el("span", "pill pill-lock", "Slides " + slides))
+        a.appendChild(foot)
+        a.setAttribute("aria-label", courseLabel(c) + ", " + plural(docs.length, "document", "documents"))
+        return a
+    }
 
-        // recently added: only on the unfiltered home view
-        var plain = !state.q && !state.type && !state.course && state.sort === "course" && data.documents.length > 6
-        $("recent").hidden = !plain
-        if (plain) {
+    function renderHome() {
+        var dash = $("dashboard")
+        dash.innerHTML = ""
+        dash.classList.toggle("by-term", state.sort === "term")
+        Array.prototype.forEach.call(document.querySelectorAll(".seg button"), function (b) {
+            b.setAttribute("aria-pressed", b.getAttribute("data-sort") === state.sort ? "true" : "false")
+        })
+        tileIndex = 0
+        var courses = orderedCourses()
+        if (!courses.length) {
+            dash.appendChild(empty("No documents yet", "Upload files into a course folder, for example files/CSE445 - Machine Learning/Notes/. The site rebuilds itself and they appear here within a few minutes."))
+            return
+        }
+        if (state.sort === "code") {
+            var grid = el("div", "tiles")
+            courses.forEach(function (c) { grid.appendChild(tile(c)) })
+            dash.appendChild(grid)
+        } else {
+            var groups = []
+            courses.forEach(function (c) {
+                var label = termKey(c.semester) > 0 ? c.semester : "Other courses"
+                var g = groups[groups.length - 1]
+                if (!g || g.label !== label) groups.push(g = { label: label, list: [] })
+                g.list.push(c)
+            })
+            groups.forEach(function (g) {
+                var sec = el("section", "term")
+                var head = el("div", "term-head")
+                head.appendChild(el("h3", null, g.label))
+                head.appendChild(el("span", null, plural(g.list.length, "course", "courses")))
+                sec.appendChild(head)
+                var grid = el("div", "tiles")
+                g.list.forEach(function (c) { grid.appendChild(tile(c)) })
+                sec.appendChild(grid)
+                dash.appendChild(sec)
+            })
+        }
+
+        // recently added (only worth showing when uploads happened on different days)
+        var pub = data.documents.filter(function (d) { return !d.locked && d.added })
+        var days = {}
+        pub.forEach(function (d) { days[d.added.slice(0, 10)] = 1 })
+        var show = Object.keys(days).length > 1
+        $("recent").hidden = !show
+        if (show) {
             var rl = $("recent-list")
             rl.innerHTML = ""
-            data.documents.filter(function (d) { return !d.locked }).sort(function (a, b) { return b.added.localeCompare(a.added) }).slice(0, 4).forEach(function (d) {
-                var li = document.createElement("li"), a = document.createElement("a")
+            pub.sort(function (a, b) { return b.added.localeCompare(a.added) }).slice(0, 4).forEach(function (d) {
+                var li = el("li"), a = el("a")
                 a.href = viewUrl(d) || fileUrl(d.path)
                 a.target = "_blank"
                 a.rel = "noopener"
-                a.innerHTML = "<b></b><small></small>"
-                a.querySelector("b").textContent = d.title
-                a.querySelector("small").textContent = courseLabel(courseOf(d.course)) + " · " + d.type
+                a.appendChild(el("b", null, d.title))
+                var c = courseOf(d.course)
+                a.appendChild(el("small", null, (c ? courseLabel(c) + " · " : "") + d.type))
                 li.appendChild(a)
                 rl.appendChild(li)
             })
         }
+    }
 
-        if (!data.documents.length) {
-            list.innerHTML = '<div class="empty"><h2>No documents yet</h2>' +
-                "<p>Upload files into a course folder, for example <code>files/CSE445 - Machine Learning/Notes/</code>. " +
-                "The site rebuilds itself and they appear here within a few minutes.</p></div>"
+    /* ---------------- one course ---------------- */
+    var LOCK_SVG = '<svg class="lock-icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="10" y="21" width="28" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M16 21v-5a8 8 0 0 1 16 0v5" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="24" cy="30" r="2.6" fill="currentColor"/><path d="M24 32v4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>'
+
+    function lockedPanel(c) {
+        var box = el("div", "locked")
+        box.innerHTML = LOCK_SVG
+        box.appendChild(el("h3", null, "Slides for " + (c.code || c.name) + " are locked"))
+        box.appendChild(el("p", null, "Lecture slides belong to the course teachers, so I share them only with people who ask. Request access, and if I can, I'll send you the password."))
+        var actions = el("div", "locked-actions")
+        var req = el("button", "btn primary", "Request access")
+        req.type = "button"
+        req.addEventListener("click", function () { openRequest(c.folder) })
+        actions.appendChild(req)
+        if (canUnlock()) {
+            var have = el("button", "btn", "I have the password")
+            have.type = "button"
+            have.addEventListener("click", openUnlock)
+            actions.appendChild(have)
+        }
+        box.appendChild(actions)
+        return box
+    }
+
+    function renderCourse() {
+        var c = courseOf(state.course)
+        var body = $("course-body"), tabs = $("tabs"), pager = $("pager")
+        body.innerHTML = ""
+        tabs.innerHTML = ""
+        pager.innerHTML = ""
+        if (!c) {
+            $("course-code").textContent = ""
+            $("course-term").textContent = ""
+            $("course-title").textContent = "Course not found"
+            $("course-desc").textContent = slidesUnlocked() ? "" : "It may only have locked slides. Unlock the slides to see it."
             return
+        }
+        document.title = courseLabel(c) + " · NSU Academic"
+        $("course-code").textContent = c.code
+        $("course-code").hidden = !c.code
+        $("course-term").textContent = c.semester || ""
+        $("course-title").textContent = c.name || c.code
+        $("course-desc").textContent = c.description || ""
+
+        var docs = docsOf(c.folder)
+        var counts = {}
+        docs.forEach(function (d) { if (d.type !== "Slides") counts[d.type] = (counts[d.type] || 0) + 1 })
+        var slides = docs.filter(function (d) { return d.type === "Slides" })
+        var types = [""].concat(Object.keys(counts).sort(), ["Slides"])
+        if (types.indexOf(state.type) === -1) state.type = ""
+        types.forEach(function (t) {
+            var b = el("button")
+            b.type = "button"
+            b.setAttribute("aria-pressed", state.type === t ? "true" : "false")
+            var n = t === "" ? docs.length : t === "Slides" ? slides.length : counts[t]
+            var locked = t === "Slides" && !slidesUnlocked()
+            b.textContent = locked ? "🔒 Slides" : (t || "All")
+            if (!locked) b.appendChild(el("span", null, String(n)))
+            b.addEventListener("click", function () { state.type = t; render() })
+            tabs.appendChild(b)
+        })
+
+        if (state.type === "Slides" && !slidesUnlocked()) {
+            body.appendChild(lockedPanel(c))
+        } else {
+            var shown = docs.filter(function (d) { return !state.type || d.type === state.type })
+                .sort(function (a, b) { return a.type.localeCompare(b.type) || a.title.localeCompare(b.title, undefined, { numeric: true }) })
+            if (shown.length) body.appendChild(docList(shown, false))
+            else if (state.type === "Slides") body.appendChild(empty("No slides for this course yet"))
+            else body.appendChild(empty("No documents here yet"))
+        }
+
+        // previous / next course in the dashboard's order
+        var list = orderedCourses()
+        var i = list.indexOf(c)
+        ;[[list[i - 1], "prev", "← Previous course"], [list[i + 1], "next", "Next course →"]].forEach(function (p) {
+            if (!p[0]) return
+            var a = el("a", p[1])
+            a.href = courseHref(p[0].folder)
+            a.appendChild(el("small", null, p[2]))
+            a.appendChild(el("b", null, courseLabel(p[0])))
+            pager.appendChild(a)
+        })
+    }
+
+    /* ---------------- search ---------------- */
+    function matches(doc) {
+        var c = courseOf(doc.course) || {}
+        var hay = [doc.title, doc.description, doc.type, doc.semester, c.code, c.name, c.semester, (doc.tags || []).join(" "), doc.path].join(" ").toLowerCase()
+        return state.q.toLowerCase().split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1 })
+    }
+    function renderResults() {
+        var body = $("results-body")
+        body.innerHTML = ""
+        var words = state.q.toLowerCase().split(/\s+/)
+        var docs = data.documents.filter(matches)
+        var courses = data.courses.filter(function (c) {
+            var hay = [c.code, c.name, c.semester, c.description].join(" ").toLowerCase()
+            return words.every(function (w) { return hay.indexOf(w) !== -1 })
+        })
+        $("results-title").textContent = plural(docs.length, "result", "results") + " for “" + state.q + "”"
+        document.title = "Search: " + state.q + " · NSU Academic"
+        if (courses.length) {
+            var chips = el("div", "results-courses")
+            courses.forEach(function (c) {
+                var a = el("a", null, courseLabel(c))
+                a.href = courseHref(c.folder)
+                chips.appendChild(a)
+            })
+            body.appendChild(chips)
         }
         if (!docs.length) {
-            list.innerHTML = '<div class="empty"><h2>Nothing matches</h2><p>Try a different word, or clear the filters.</p></div>'
+            body.appendChild(empty("Nothing matches", "Try a different word, or a course code such as CSE411."))
             return
         }
+        docs.sort(function (a, b) { return a.course.localeCompare(b.course) || a.title.localeCompare(b.title, undefined, { numeric: true }) })
+        body.appendChild(docList(docs, true))
+    }
 
-        if (state.sort === "course") {
-            data.courses.forEach(function (c) {
-                var mine = docs.filter(function (d) { return d.course === c.folder })
-                if (!mine.length) return
-                var sec = document.createElement("section")
-                sec.className = "course"
-                sec.id = "course-" + c.folder.replace(/[^A-Za-z0-9]+/g, "-")
-                var head = document.createElement("div")
-                head.className = "course-head"
-                if (c.code) {
-                    var code = document.createElement("span")
-                    code.className = "code"
-                    code.textContent = c.code
-                    head.appendChild(code)
-                }
-                var h = document.createElement("h2")
-                h.textContent = c.name || c.code
-                head.appendChild(h)
-                var count = document.createElement("span")
-                count.className = "count"
-                count.textContent = mine.length + (mine.length === 1 ? " document" : " documents") + (c.semester ? " · " + c.semester : "")
-                head.appendChild(count)
-                sec.appendChild(head)
-                if (c.description) {
-                    var p = document.createElement("p")
-                    p.className = "course-desc"
-                    p.textContent = c.description
-                    sec.appendChild(p)
-                }
-                var ul = document.createElement("ul")
-                ul.className = "docs"
-                mine.sort(function (a, b) { return a.type.localeCompare(b.type) || a.title.localeCompare(b.title, undefined, { numeric: true }) })
-                    .forEach(function (d) { ul.appendChild(row(d, false)) })
-                sec.appendChild(ul)
-                list.appendChild(sec)
-            })
+    /* ---------------- views ---------------- */
+    function render() {
+        writeHash()
+        var view = state.q ? "results" : state.course ? "course" : "home"
+        if (lastView === "home" && view !== "home") homeScroll = window.scrollY
+        $("home").hidden = view !== "home"
+        $("course-view").hidden = view !== "course"
+        $("results-view").hidden = view !== "results"
+        if (view === "home") {
+            document.title = "NSU Academic · Israt's Study Hub"
+            renderHome()
+        } else if (view === "course") {
+            renderCourse()
         } else {
-            var ul = document.createElement("ul")
-            ul.className = "docs"
-            docs.sort(state.sort === "new"
-                ? function (a, b) { return b.added.localeCompare(a.added) }
-                : function (a, b) { return a.title.localeCompare(b.title, undefined, { numeric: true }) })
-                .forEach(function (d) { ul.appendChild(row(d, true)) })
-            list.appendChild(ul)
+            renderResults()
         }
+        if (view !== lastView) {
+            if (view === "home") window.scrollTo(0, homeScroll)
+            else if (view === "course") window.scrollTo(0, 0)
+        }
+        lastView = view
     }
 
     function showStats() {
-        var total = data.documents.reduce(function (s, d) { return s + d.size }, 0)
-        $("stats").textContent = data.documents.length + " documents · " + data.courses.length + " courses · " + fmtSize(total) +
-            " · updated " + fmtDate(data.generated)
+        var terms = {}
+        data.courses.forEach(function (c) { if (termKey(c.semester) > 0) terms[c.semester] = 1 })
+        $("stat-docs").textContent = data.documents.length
+        $("stat-courses").textContent = data.courses.length
+        $("stat-terms").textContent = Object.keys(terms).length
+        $("stat-updated").textContent = fmtDate(data.generated)
     }
-    function fillCourses() {
-        var sel = $("course")
-        while (sel.options.length > 1) sel.remove(1)
-        data.courses.forEach(function (c) {
-            var o = document.createElement("option")
+
+    /* ---------------- requesting access to slides ---------------- */
+    function openRequest(folder) {
+        var dlg = $("request-dlg"), sel = $("req-course")
+        if (typeof dlg.showModal !== "function") {
+            window.open(issueUrl(courseOf(folder), "", ""), "_blank", "noopener")
+            return
+        }
+        sel.innerHTML = ""
+        orderedCourses().slice().sort(function (a, b) { return (a.code || "~").localeCompare(b.code || "~") }).forEach(function (c) {
+            var o = el("option", null, courseLabel(c))
             o.value = c.folder
-            o.textContent = courseLabel(c)
             sel.appendChild(o)
         })
-        sel.value = state.course
+        sel.value = folder || state.course || sel.value
+        var byEmail = !!requestEmail
+        $("req-email").required = byEmail
+        $("req-email").parentNode.hidden = !byEmail
+        $("req-id").hidden = !byEmail
+        $("req-id").previousElementSibling.hidden = !byEmail
+        $("request-note").textContent = byEmail
+            ? "This opens your email app with the request filled in. I'll reply to the email address you give."
+            : "This opens a pre-filled request on GitHub (you need a free GitHub account). GitHub requests are public, so don't add your email or student ID; I'll reply there."
+        $("request-go").textContent = byEmail ? "Write the email" : "Open the request on GitHub"
+        dlg.showModal()
+        $("req-name").focus()
+    }
+    function issueUrl(c, name, why) {
+        var label = c ? courseLabel(c) : "a course"
+        var body = "I'd like access to the lecture slides for " + label + ".\n\n" +
+            (name ? "Name: " + name + "\n" : "") + (why ? "Why I need them: " + why + "\n" : "")
+        return REPO + "/issues/new?title=" + encodeURIComponent("Slide access request: " + label) + "&body=" + encodeURIComponent(body)
+    }
+    function setupRequest() {
+        var dlg = $("request-dlg"), form = $("request-form")
+        $("request-cancel").addEventListener("click", function () { dlg.close() })
+        form.addEventListener("submit", function (e) {
+            e.preventDefault()
+            var c = courseOf($("req-course").value)
+            var name = $("req-name").value.trim(), why = $("req-why").value.trim()
+            if (requestEmail) {
+                var label = c ? courseLabel(c) : "a course"
+                var body = "Hello Israt,\n\nI'd like access to the lecture slides for " + label + ".\n\n" +
+                    "Name: " + name + "\nEmail: " + $("req-email").value.trim() + "\n" +
+                    ($("req-id").value.trim() ? "University and student ID: " + $("req-id").value.trim() + "\n" : "") +
+                    (why ? "Why I need them: " + why + "\n" : "") + "\nThank you!"
+                window.location.href = "mailto:" + requestEmail + "?subject=" + encodeURIComponent("Slide access request: " + label) + "&body=" + encodeURIComponent(body)
+            } else {
+                window.open(issueUrl(c, name, why), "_blank", "noopener")
+            }
+            dlg.close()
+        })
     }
 
     /* ---------------- locked slides ----------------
@@ -284,7 +503,6 @@
                                   description: "", semester: "", tags: [], ext: s.ext, size: s.size,
                                   added: s.added, updated: s.added, locked: true })
         })
-        fillCourses()
         showStats()
         $("unlock").textContent = "🔓 Slides unlocked · Lock again"
         render()
@@ -320,9 +538,19 @@
             .then(function () { button.textContent = label })
     }
 
+    function canUnlock() {
+        return !!(data.slides && window.crypto && crypto.subtle && typeof $("unlock-dlg").showModal === "function")
+    }
+    function openUnlock() {
+        if (slidesUnlocked() || !canUnlock()) return
+        $("unlock-err").hidden = true
+        $("unlock-pw").value = ""
+        $("unlock-dlg").showModal()
+    }
+
     function setupUnlock() {
         var btn = $("unlock"), dlg = $("unlock-dlg"), form = $("unlock-form"), pw = $("unlock-pw"), err = $("unlock-err"), go = $("unlock-go")
-        if (!data.slides || !window.crypto || !crypto.subtle || typeof dlg.showModal !== "function") return
+        if (!canUnlock()) return
         btn.hidden = false
         btn.addEventListener("click", function () {
             if (slideKeys) {   // already unlocked: lock again
@@ -330,11 +558,10 @@
                 location.reload()
                 return
             }
-            err.hidden = true
-            pw.value = ""
-            dlg.showModal()
+            openUnlock()
         })
         $("unlock-cancel").addEventListener("click", function () { dlg.close() })
+        $("unlock-request").addEventListener("click", function () { dlg.close(); openRequest(state.course) })
         form.addEventListener("submit", function (e) {
             e.preventDefault()
             go.disabled = true
@@ -357,23 +584,50 @@
     /* ---------------- start ---------------- */
     readHash()
     $("q").value = state.q
-    $("sort").value = state.sort
-    $("q").addEventListener("input", function (e) { state.q = e.target.value.trim(); render() })
-    $("course").addEventListener("change", function (e) { state.course = e.target.value; render() })
-    $("sort").addEventListener("change", function (e) { state.sort = e.target.value; render() })
+    $("q").addEventListener("input", function (e) {
+        state.q = e.target.value.trim()
+        if (state.q) state.course = ""
+        render()
+    })
+    $("q").addEventListener("keydown", function (e) {
+        if (e.key === "Escape") { e.target.value = ""; state.q = ""; render(); e.target.blur() }
+    })
+    document.addEventListener("keydown", function (e) {
+        var t = e.target.tagName
+        if (e.key === "/" && t !== "INPUT" && t !== "TEXTAREA" && t !== "SELECT" && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            $("q").focus()
+        }
+    })
+    Array.prototype.forEach.call(document.querySelectorAll(".seg button"), function (b) {
+        b.addEventListener("click", function () { state.sort = b.getAttribute("data-sort"); render() })
+    })
+    function goHome(e) {
+        e.preventDefault()
+        $("q").value = ""
+        state.q = ""
+        state.course = ""
+        state.type = ""
+        history.pushState(null, "", location.pathname + location.search + (state.sort === "code" ? "#sort=code" : ""))
+        render()
+    }
+    $("home-link").addEventListener("click", goHome)
+    $("back-link").addEventListener("click", goHome)
+    window.addEventListener("hashchange", function () { readHash(); $("q").value = state.q; render() })
+    window.addEventListener("popstate", function () { readHash(); $("q").value = state.q; render() })
+    setupRequest()
 
     fetch("catalog.json", { cache: "no-cache" })
         .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
         .then(function (json) {
             data = json
             showStats()
-            fillCourses()
             render()
             setupUnlock()
         })
         .catch(function () {
-            $("stats").textContent = "The document list couldn't be loaded."
-            $("list").innerHTML = '<div class="empty"><h2>The list isn\'t available</h2>' +
-                "<p>If you opened this file directly, run <code>python tools/build_catalog.py</code> and open <code>_site/index.html</code> through a local server.</p></div>"
+            $("stat-docs").textContent = "–"
+            $("dashboard").innerHTML = ""
+            $("dashboard").appendChild(empty("The list isn't available", "If you opened this file directly, run python tools/build_catalog.py and open _site/index.html through a local server."))
         })
 })()

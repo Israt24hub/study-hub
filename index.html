@@ -3,24 +3,106 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Israt's Study Hub</title>
-    <meta name="description" content="Course notes, summaries and reports from CSE courses at North South University, free to read and download.">
+    <title>NSU Academic · Israt's Study Hub</title>
+    <meta name="description" content="Course notes, assignments and reports from my courses at North South University, free to read and download.">
+    <meta name="theme-color" content="#0f2f2d">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,600&family=JetBrains+Mono:wght@500&display=swap">
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-<header class="masthead">
-    <div class="wrap">
-        <p class="eyebrow">Study Hub</p>
-        <h1>NSU Academic</h1>
-        <p class="lede">Notes, summaries and reports from my CSE courses at North South University. Free to read and download.</p>
-        <p class="stats" id="stats">Loading…</p>
+<!-- EDIT: put your email between the quotes in data-request-email="" so slide-access requests arrive by email.
+     While it is empty, the Request access form opens a pre-filled GitHub issue instead. -->
+<body data-request-email="">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="bar">
+    <div class="wrap bar-inner">
+        <a class="brand" href="./" id="home-link">
+            <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="11" height="11" rx="2.5"/><rect x="18" y="3" width="11" height="11" rx="2.5"/><rect x="3" y="18" width="11" height="11" rx="2.5"/><rect x="18" y="18" width="11" height="11" rx="2.5" class="lit"/></svg>
+            <span class="brand-text"><b>NSU Academic</b><small>Study Hub</small></span>
+        </a>
+        <label class="search" role="search">
+            <span class="visually-hidden">Search all documents</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input id="q" type="search" placeholder="Search notes, courses, topics" autocomplete="off">
+            <kbd aria-hidden="true">/</kbd>
+        </label>
         <button type="button" id="unlock" class="unlock" hidden>🔒 Unlock slides</button>
     </div>
 </header>
 
+<main id="main" class="wrap">
+    <!-- ================= dashboard ================= -->
+    <section id="home" aria-labelledby="home-title">
+        <div class="overview">
+            <div>
+                <h1 id="home-title">NSU Academic</h1>
+                <p class="lede">Notes, assignments and reports from my courses at North South University. Free to read and download.</p>
+            </div>
+            <dl class="stats" id="stats">
+                <div class="stat"><dt>Documents</dt><dd id="stat-docs">–</dd></div>
+                <div class="stat"><dt>Courses</dt><dd id="stat-courses">–</dd></div>
+                <div class="stat"><dt>Semesters</dt><dd id="stat-terms">–</dd></div>
+                <div class="stat"><dt>Last updated</dt><dd id="stat-updated">–</dd></div>
+            </dl>
+        </div>
+
+        <div class="dash-head">
+            <h2>Courses</h2>
+            <div class="seg" role="group" aria-label="Arrange courses">
+                <button type="button" data-sort="term" aria-pressed="true">By semester</button>
+                <button type="button" data-sort="code" aria-pressed="false">By course code</button>
+            </div>
+        </div>
+        <div id="dashboard" aria-live="polite"></div>
+
+        <section id="recent" class="recent" hidden>
+            <h2>Recently added</h2>
+            <ol id="recent-list" class="recent-list"></ol>
+        </section>
+
+        <section class="also">
+            <h2>Projects</h2>
+            <ul>
+                <li><a href="https://github.com/Israt24hub/bank-marketing-leakage">Bank Marketing: one column that fakes the results</a>, a CSE445 study of data leakage</li>
+                <li><a href="https://israt24hub.github.io/data-leakage-explained/">The Column That Fooled Every Model</a>, an interactive explainer</li>
+                <li><a href="https://github.com/Israt24hub/leakguard">LeakGuard</a>, a Python library that finds data leakage</li>
+                <li><a href="https://github.com/Israt24hub/bangla-digit-recognizer">Bangla Digit Recognizer</a>, a CNN that runs in the browser</li>
+                <li><a href="https://github.com/Israt24hub/bangla-sentiment">Bangla Sentiment Analysis</a>, BanglaBERT on SentNoB</li>
+            </ul>
+        </section>
+    </section>
+
+    <!-- ================= one course ================= -->
+    <section id="course-view" hidden aria-labelledby="course-title">
+        <a class="back" href="./" id="back-link">← All courses</a>
+        <header class="course-hero">
+            <div class="course-hero-top">
+                <span class="code" id="course-code"></span>
+                <span class="course-term" id="course-term"></span>
+            </div>
+            <h1 id="course-title"></h1>
+            <p class="course-desc" id="course-desc"></p>
+        </header>
+        <div class="tabs" id="tabs" role="group" aria-label="Document type"></div>
+        <div id="course-body" aria-live="polite"></div>
+        <nav class="pager" id="pager" aria-label="Other courses"></nav>
+    </section>
+
+    <!-- ================= search results ================= -->
+    <section id="results-view" hidden aria-labelledby="results-title">
+        <h1 id="results-title" class="results-title"></h1>
+        <div id="results-body" aria-live="polite"></div>
+    </section>
+</main>
+
+<footer class="wrap foot">
+    <p>By <a href="https://israt24hub.github.io/">Israt Zaman Srity</a>. My own notes and reports are shared under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>: reuse them freely with credit. Teachers' slides are locked and shared only with people I've given the password.</p>
+    <p>Found a mistake? <a href="https://github.com/Israt24hub/study-hub/issues">Let me know</a>.</p>
+</footer>
+
+<!-- password dialog for the locked slides -->
 <dialog id="unlock-dlg" class="dlg" aria-labelledby="unlock-title">
     <form id="unlock-form">
         <h2 id="unlock-title">Unlock slides</h2>
@@ -28,6 +110,7 @@
         <label for="unlock-pw">Password</label>
         <input id="unlock-pw" type="password" autocomplete="current-password" required>
         <p class="dlg-error" id="unlock-err" role="alert" hidden></p>
+        <p class="dlg-note">Don't have it? <button type="button" class="linklike" id="unlock-request">Request access</button></p>
         <div class="dlg-actions">
             <button type="button" id="unlock-cancel">Cancel</button>
             <button type="submit" id="unlock-go" class="primary">Unlock</button>
@@ -35,44 +118,28 @@
     </form>
 </dialog>
 
-<main class="wrap">
-    <div class="controls" role="search">
-        <label class="search">
-            <span class="visually-hidden">Search documents</span>
-            <input id="q" type="search" placeholder="Search by title, course, topic…" autocomplete="off">
-        </label>
-        <select id="course" aria-label="Course"><option value="">All courses</option></select>
-        <select id="sort" aria-label="Sort">
-            <option value="course">Group by course</option>
-            <option value="new">Newest first</option>
-            <option value="az">A to Z</option>
-        </select>
-    </div>
-    <div class="types" id="types" role="group" aria-label="Document type"></div>
-
-    <section id="recent" class="recent" hidden>
-        <h2>Recently added</h2>
-        <ol id="recent-list" class="recent-list"></ol>
-    </section>
-
-    <section id="list" aria-live="polite"></section>
-
-    <section class="also">
-        <h2>Projects</h2>
-        <ul>
-            <li><a href="https://github.com/Israt24hub/bank-marketing-leakage">Bank Marketing: one column that fakes the results</a> · CSE445 study of data leakage</li>
-            <li><a href="https://israt24hub.github.io/data-leakage-explained/">The Column That Fooled Every Model</a> · interactive explainer</li>
-            <li><a href="https://github.com/Israt24hub/leakguard">LeakGuard</a> · Python library that finds data leakage</li>
-            <li><a href="https://github.com/Israt24hub/bangla-digit-recognizer">Bangla Digit Recognizer</a> · CNN in the browser</li>
-            <li><a href="https://github.com/Israt24hub/bangla-sentiment">Bangla Sentiment Analysis</a> · BanglaBERT on SentNoB</li>
-        </ul>
-    </section>
-</main>
-
-<footer class="wrap foot">
-    <p>By <a href="https://github.com/Israt24hub">Israt Zaman Srity</a>. My own notes and reports are shared under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>: reuse them freely with credit. Teachers' slides are locked and shown only to people I've given the password.</p>
-    <p>Found a mistake? <a href="https://github.com/Israt24hub/study-hub/issues">Let me know</a>.</p>
-</footer>
+<!-- request-access dialog -->
+<dialog id="request-dlg" class="dlg" aria-labelledby="request-title">
+    <form id="request-form">
+        <h2 id="request-title">Request access to slides</h2>
+        <p>Lecture slides belong to the course teachers, so I share them only with people who ask. Tell me who you are and which course you need. If I can, I'll send you the password.</p>
+        <label for="req-course">Course</label>
+        <select id="req-course" required></select>
+        <div class="field-row">
+            <div><label for="req-name">Your name</label><input id="req-name" type="text" autocomplete="name" required></div>
+            <div><label for="req-email">Your email</label><input id="req-email" type="email" autocomplete="email" required></div>
+        </div>
+        <label for="req-id">University and student ID <span class="optional">(optional)</span></label>
+        <input id="req-id" type="text" autocomplete="off">
+        <label for="req-why">Why you need them <span class="optional">(optional)</span></label>
+        <textarea id="req-why" rows="3"></textarea>
+        <p class="dlg-note" id="request-note"></p>
+        <div class="dlg-actions">
+            <button type="button" id="request-cancel">Cancel</button>
+            <button type="submit" class="primary" id="request-go">Send request</button>
+        </div>
+    </form>
+</dialog>
 
 <template id="row-tpl">
     <li class="doc">

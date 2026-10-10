@@ -4,6 +4,8 @@
 
 My course notes, summaries and reports from North South University, organised by course, searchable, and free to read and download.
 
+The home page is a dashboard: one tile per course, grouped by semester (or sorted by course code), with a thin light that runs around the tiles. Each tile opens the course's page, where documents are split into tabs by type. Every course has a **Slides** tab: it stays locked until a visitor enters the password, and anyone without it can press **Request access**.
+
 ## Add a document (2 minutes)
 
 1. Open the [`files`](files) folder on GitHub, then the course folder (for example `CSE445 - Machine Learning`), then the type folder (for example `Notes`).
@@ -44,6 +46,14 @@ Both files can be edited on GitHub (pencil icon) or in Excel (save as CSV).
 - **No:** textbooks, solution manuals and other copyrighted PDFs. Link to the official source instead. Keep private copies in cloud storage.
 
 ## Locked slides
+
+### Access requests
+
+**Request access** collects the visitor's name, the course and a reason. To receive requests by email, open `index.html`, search for `EDIT`, and put your email address between the quotes in `data-request-email=""`. The form then opens the visitor's email app with the request written out. While it's empty, the form opens a pre-filled GitHub issue instead. Those are public, so the form leaves out email addresses and student IDs.
+
+When you approve someone, send them the slides password privately.
+
+### How the lock works
 
 Teachers' slides are encrypted (AES-256) before they're uploaded, so the public repo only holds unreadable `.bin` files plus an encrypted list of titles. On the site, **🔒 Unlock slides** asks for the password; after that every course shows a *Slides* filter, PDFs open in a new tab and PowerPoint files download. Nothing is unlocked on GitHub's side: the browser does it, and the password never leaves your computer. People you give the password to can open and save the slides, so share it only with people you trust.
 
