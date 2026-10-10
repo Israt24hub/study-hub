@@ -582,8 +582,25 @@
     }
 
     /* ---------------- start ---------------- */
+    // colour theme: Light, Dark, or the same as the device (the default)
+    function setTheme(choice, save) {
+        if (choice === "light" || choice === "dark") document.documentElement.setAttribute("data-theme", choice)
+        else document.documentElement.removeAttribute("data-theme")
+        Array.prototype.forEach.call(document.querySelectorAll("[data-theme-choice]"), function (b) {
+            b.setAttribute("aria-pressed", b.getAttribute("data-theme-choice") === choice ? "true" : "false")
+        })
+        if (save) try { localStorage.setItem("studyhub-theme", choice) } catch (e) {}
+    }
+    var savedTheme = "system"
+    try { savedTheme = localStorage.getItem("studyhub-theme") || "system" } catch (e) {}
+    setTheme(savedTheme, false)
+    Array.prototype.forEach.call(document.querySelectorAll("[data-theme-choice]"), function (b) {
+        b.addEventListener("click", function () { setTheme(b.getAttribute("data-theme-choice"), true) })
+    })
+
     readHash()
     $("q").value = state.q
+    if (window.matchMedia("(max-width: 640px)").matches) $("q").placeholder = "Search notes and courses"
     $("q").addEventListener("input", function (e) {
         state.q = e.target.value.trim()
         if (state.q) state.course = ""

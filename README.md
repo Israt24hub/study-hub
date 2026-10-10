@@ -4,7 +4,7 @@
 
 My course notes, summaries and reports from North South University, organised by course, searchable, and free to read and download.
 
-The home page is a dashboard: one tile per course, grouped by semester (or sorted by course code), with a thin light that runs around the tiles. Each tile opens the course's page, where documents are split into tabs by type. Every course has a **Slides** tab: it stays locked until a visitor enters the password, and anyone without it can press **Request access**.
+The home page is a dashboard: one tile per course, grouped by semester (or sorted by course code), with a thin light that runs around the tiles. The sun, moon and screen buttons in the top bar switch between light colours, dark colours, and the same setting as the visitor's device; the site remembers the choice. Each tile opens the course's page, where documents are split into tabs by type. Every course has a **Slides** tab: it stays locked until a visitor enters the password, and anyone without it can press **Request access**.
 
 ## Add a document (2 minutes)
 
